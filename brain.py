@@ -48,12 +48,30 @@ class SecureRAG:
         if chat_history is None:
             chat_history = []
             
-        # Get numerical clearance level (default to 1 if unknown)
+        # 1. Proactive Query Guard (No-Hallucination Flex)
+        # Check if the query itself asks about sensitive topics defined in our policies
         user_clearance = self.ROLE_LEVELS.get(user_role, 1)
+        query_lower = user_query.lower()
 
-        # 4. Search with Metadata Filtering using $lte (Less Than or Equal)
-        # This ensures an Employee (1) NEVER sees Manager (2) or Admin (3) records.
-        # This syntax is highly robust across Chroma versions.
+        # Check for Admin topics in query
+        if user_clearance < 3: # Not an Admin
+            admin_kws = self.policies.get("admin", {}).get("keywords", [])
+            if any(kw.lower() in query_lower for kw in admin_kws):
+                return {
+                    "answer": "Security Alert: Access to sensitive administrative topics is restricted to authorized personnel. This attempt has been logged.",
+                    "sources": []
+                }
+        
+        # Check for Manager topics in query
+        if user_clearance < 2: # Not a Manager
+            manager_kws = self.policies.get("manager", {}).get("keywords", [])
+            if any(kw.lower() in query_lower for kw in manager_kws):
+                return {
+                    "answer": "Clearance Denied: You do not have the required role level to query strategic management data.",
+                    "sources": []
+                }
+
+        # 2. Search with Metadata Filtering using $lte (Less Than or Equal)
         docs = self.vector_db.similarity_search(
             user_query, 
             k=3, 
@@ -74,11 +92,12 @@ class SecureRAG:
                 role_label = "User" if msg.get("role") == "user" else "Assistant"
                 history_context += f"{role_label}: {msg.get('content')}\n"
 
-        # 5. Build the Context and Ask LLM
+        # 5. Build the Context and Ask LLM with Extreme Strictness
         context = "\n".join([doc.page_content for doc in docs])
-        prompt = f"""You are a helpful and secure AI assistant.
-Answer the question based strictly on the provided Context.
-If the context does not contain the answer, say "I do not have clearance to access this information."
+        prompt = f"""You are a SECURE ENTERPRISE AI.
+Your ONLY source of information is the Context provided below.
+DO NOT use your own knowledge. DO NOT guess numbers.
+If the context is empty or doesn't mention the specific answer, say "I do not have clearance to access this information."
 
 Context:
 {context}
@@ -87,7 +106,7 @@ Context:
 
 Question: {user_query}
 
-Short, direct answer:"""
+Short, direct answer (or refusal):"""
         
         answer = self.llm.invoke(prompt)
         
