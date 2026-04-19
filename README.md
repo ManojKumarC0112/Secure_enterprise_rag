@@ -1,78 +1,114 @@
-# Secure Enterprise RAG
+# 🛡️ Secure Enterprise RAG: Zero-Trust Data Intelligence
 
-An enterprise-grade Retrieval-Augmented Generation (RAG) system built with FastAPI, Next.js, and ChromaDB.
+An enterprise-grade, production-ready **Retrieval-Augmented Generation (RAG)** platform designed for internal corporate data. Built with a **Zero-Trust Security Architecture**, this system ensures that sensitive information is never leaked to unauthorized users while providing transparent, citation-backed AI responses.
 
-Designed specifically for corporate environments, this system prioritizes **Zero-Trust Architecture** and robust observability, ensuring that Large Language Models (LLMs) and Small Language Models (SLMs) only retrieve and process data the user is strictly authorized to see.
+![Dashboard Preview](https://img.shields.io/badge/Security-Zero--Trust-blueviolet) ![Explainable AI](https://img.shields.io/badge/XAI-Source--Citations-blue) ![Role-Based](https://img.shields.io/badge/RBAC-Hierarchical-green)
 
-## 🚀 Key Features Highlights
+---
 
-### 🛡️ Zero-Trust Retrieval Pipeline
-Built a secure bridge between a FastAPI gateway and a ChromaDB vector store. The system implements a mandatory identity-check middleware that injects metadata filters into every query. This guarantees that data isolation is handled **at the database level**, radically mitigating Prompt Injection attacks attempting to bypass application-layer logic.
+## 🚀 Key Feature Pillars
 
-### 📊 Observability & Compliance
-Included an SQLite-based Audit Logger. Every query against the corporate knowledge base is logged with the simulated identity role (`Admin`, `Manager`, `Employee`), the exact text of the query, and the HTTP status response code. This enables complete tracing and auditing of AI utilization.
+### 1. 🛡️ Hierarchical Zero-Trust Pipeline
+Unlike standard RAG systems, this platform implements security **at the database level**:
+- **Chunk-Level Clearance**: Documents are split into 500-character chunks, each with its own `clearance_level` (Admin=3, Manager=2, Employee=1).
+- **Mathematical Isolation**: Queries use a strict `$lte` (Less Than or Equal) metadata filter. An Employee (Level 1) can **physically never retrieve** Admin-level (Level 3) data chunks.
 
-### ⚡ Text-First SaaS Dashboard
-Built a highly responsive "Raycast/Spotlight" style Next.js frontend using Tailwind CSS. The interface removes experimental distractions and focuses purely on high-performance text retrieval, complete with explicit **RBAC Status Indicators** and "Sources" footer attribution, establishing high UX clarity for power users.
+### 2. 🧠 Dynamic Security Policy Engine
+Configuration stays out of the code. A centralized `security_policies.json` drives the platform's awareness:
+- **Proactive Query Guard**: Incoming queries are scanned for sensitive keywords and regex patterns (e.g., project codenames, salary patterns).
+- **Instant Interception**: Restricted queries are shut down BEFORE they reach the AI, eliminating "helper-hallucinations" simulating data leaks.
+- **AI Auto-Classification**: Uses a local SLM (**Qwen2-0.5b**) with a heuristic booster to automatically tag document chunks during ingestion.
 
-## 🏗️ Architecture
+### 3. 🔍 Explainable AI (XAI)
+Establish absolute trust with stakeholders through transparent sourcing:
+- **Source Citation Modals**: Every AI answer features clickable citation badges.
+- **Glassmorphic UI**: Inspect the exact text snippet the AI read to generate its answer, ensuring 100% verifiability.
+- **Strict Hallucination Guardrails**: The model is forbidden from answering if the retrieved context is insufficient.
+
+### 4. 👮 Admin Command Center
+A visual cockpit for security administrators:
+- **Real-Time Analytics**: Visual tracking of "Intrusion Attempts" vs. "Granted Queries" using Recharts.
+- **Document Vault**: A management dashboard to monitor, audit, and delete ingested documents from the vector store.
+- **PII Sanitization**: Automated regex-based redaction of SSNs, Credit Cards, and Phone numbers during ingestion.
+
+---
+
+## 🏗️ System Architecture
 
 ```mermaid
 graph TD
     %% Define styles
-    classDef client fill:#f9f9f9,stroke:#333,stroke-width:2px;
-    classDef gateway fill:#e0f7fa,stroke:#006064,stroke-width:2px;
-    classDef db fill:#fbe9e7,stroke:#bf360c,stroke-width:2px;
-    classDef llm fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
-    classDef aud fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef client fill:#f9f9f9,stroke:#6366f1,stroke-width:2px;
+    classDef gateway fill:#eef2ff,stroke:#4338ca,stroke-width:2px;
+    classDef db fill:#fdf2f2,stroke:#b91c1c,stroke-width:2px;
+    classDef policy fill:#f0fdf4,stroke:#15803d,stroke-width:2px;
 
     %% Nodes
-    C[Next.js Client Dash<br/>Provides Role via Header]:::client
-    A[FastAPI Gateway<br/>Mandatory Identity Check]:::gateway
-    Audit[(SQLite Audit Logs<br/>Logs Query & Role)]:::aud
-    DB[(ChromaDB Store<br/>Metadata Filtering)]:::db
-    M[SLM Generation<br/>Qwen2:0.5b / Phi-3]:::llm
+    C[Next.js Client Dash<br/>(Glassmorphic UI)]:::client
+    P[Security Policy Engine<br/>(JSON Configuration)]:::policy
+    A[FastAPI Gateway<br/>(Query-Time Guard)]:::gateway
+    Audit[(SQLite Audit Logs)]:::gateway
+    DB[(ChromaDB Store<br/>Hierarchical Filter)]:::db
+    M[SLM Inference<br/>(Qwen2-0.5b)]:::policy
 
     %% Edges
-    C -->|POST /ask| A
-    A -->|Role, Query, Status| Audit
-    A -->|Role -> $in metadata filter| DB
-    DB -->|Authorized Context| M
-    M -->|Synthesized Answer| A
-    A -->|Final JSON| C
+    C -->|Ask Query| A
+    P -.->|Load Logic| A
+    A -->|Proactive Block| C
+    A -->|Authorized Search| DB
+    DB -->|Contextual Chunks| M
+    M -->|Cited Response| A
+    A -->|Log Attempt| Audit
+    A -->|Final Response| C
 ```
 
-### Security Command Center Architecture
+---
 
-This project represents a complete Secure Software Development Lifecycle (SSDLC):
+## 🛠️ Technology Stack
 
-| Layer | Responsibility |
-| --- | --- |
-| **Identity (UI)** | Next.js Role Switcher + Header-based Auth Simulation. |
-| **Gateway (API)** | FastAPI + RBAC Middleware + SQLite Audit Logging. |
-| **Security (DB)** | ChromaDB Metadata Filtering (`$in` operator). |
-| **Intelligence (LLM)** | Qwen2-0.5b (SLM) for local, private inference. |
+- **Frontend**: Next.js 15 (App Router), Tailwind CSS, Lucide Icons, Recharts.
+- **Backend**: FastAPI, Python 3.11+.
+- **Database**: ChromaDB (Vector Search), SQLite (Audit & User DB).
+- **AI Model**: Qwen2-0.5b (Ollama) - Optimized for local, private deployment.
 
-## 🛠️ Tech Stack
-- **Frontend**: Next.js (App Router), React, Tailwind CSS v4, Lucide React
-- **Backend**: FastAPI, Python 3
-- **Database**: ChromaDB (Vector Store), SQLite (Audit Logs)
-- **AI Models**: Designed to route via local small LLMs (SLMs) like Qwen2 or Llama3 for rapid edge performance.
+---
 
 ## 🏃 Getting Started
 
-### 1. Start the Secure Backend
+### 1. Prerequisites
+- **Ollama**: Install and run `ollama serve`.
+- **Model**: `ollama pull qwen2:0.5b`.
+
+### 2. Backend Setup
 ```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 python main.py
-# Or run with uvicorn directly
-uvicorn main:app --reload
 ```
 
-### 2. Start the Zero-Trust Dashboard
+### 3. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Navigate to `http://localhost:3000` to interact with the Next.js SaaS Command Bar interface.
+---
+
+## 🛡️ Security Configuration: `security_policies.json`
+To update the system's security awareness without changing code:
+```json
+{
+  "admin": {
+    "keywords": ["salary", "m&a", "bonus", "project alpha"],
+    "patterns": ["ACME-SEC-[0-9]{4}"]
+  }
+}
+```
+*Simply restart the backend to apply new policies.*
+
+---
+
+## 📜 License
+Privately developed for Professional Portfolio demonstration. No unauthorized distribution.
