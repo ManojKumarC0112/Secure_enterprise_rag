@@ -175,6 +175,21 @@ def get_messages(session_id: int, current_user: dict = Depends(get_current_user)
     conn.close()
     return {"messages": messages}
 
+@app.delete("/sessions/{session_id}")
+def delete_session(session_id: int, current_user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id FROM sessions WHERE id=? AND user_id=?", (session_id, current_user["user_id"]))
+    if not c.fetchone():
+        conn.close()
+        raise HTTPException(status_code=403, detail="Session not found or forbidden")
+    
+    c.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    c.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
 @app.post("/ask")
 def ask_question(request: QueryRequest, current_user: dict = Depends(get_current_user)):
     role = current_user["role"]

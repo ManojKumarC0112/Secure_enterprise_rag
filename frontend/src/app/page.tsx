@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Search, Shield, UploadCloud, FileText, Database, Code, ShieldAlert, LogOut, MessageSquare, Plus, ChevronRight, ArrowRight } from "lucide-react";
+import { Search, Shield, UploadCloud, FileText, Database, Code, ShieldAlert, LogOut, MessageSquare, Plus, ChevronRight, ArrowRight, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface AuditLog {
@@ -146,6 +146,29 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, displayedText]);
 
+  const deleteSession = async (e: React.MouseEvent, sessionId: number) => {
+    e.stopPropagation(); // Prevent loading session when clicking delete
+    if (!token) return;
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/sessions/${sessionId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setSessions(prev => prev.filter(s => s.id !== sessionId));
+        if (activeSessionId === sessionId) {
+          setActiveSessionId(null);
+          setMessages([]);
+          setDisplayedText("");
+          setLatestAssistantMsg("");
+          setLatestSources([]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete", err);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
@@ -249,14 +272,23 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto w-full p-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-700">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 my-2">Case Files</p>
           {sessions.map(s => (
-            <button
+            <div 
                key={s.id}
                onClick={() => loadSession(s.id)}
-               className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-sm transition-all focus:outline-none ${activeSessionId === s.id ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/30' : 'hover:bg-slate-800/80'}`}
+               className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left text-sm transition-all focus:outline-none cursor-pointer ${activeSessionId === s.id ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/30' : 'hover:bg-slate-800/80'}`}
             >
-              <MessageSquare className="w-4 h-4 shrink-0 opacity-70" />
-              <span className="truncate flex-1">{s.title}</span>
-            </button>
+              <div className="flex items-center gap-2 flex-1 truncate pr-2">
+                 <MessageSquare className="w-4 h-4 shrink-0 opacity-70" />
+                 <span className="truncate flex-1">{s.title}</span>
+              </div>
+              <button 
+                 onClick={(e) => deleteSession(e, s.id)}
+                 className="p-1.5 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-red-400 hover:bg-slate-700/50 rounded transition-all text-slate-500 shrink-0"
+                 title="Delete Case File"
+              >
+                 <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
         
