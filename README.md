@@ -44,12 +44,12 @@ graph TD
     classDef policy fill:#f0fdf4,stroke:#15803d,stroke-width:2px;
 
     %% Nodes
-    C[Next.js Client Dash<br/>(Glassmorphic UI)]:::client
-    P[Security Policy Engine<br/>(JSON Configuration)]:::policy
-    A[FastAPI Gateway<br/>(Query-Time Guard)]:::gateway
-    Audit[(SQLite Audit Logs)]:::gateway
-    DB[(ChromaDB Store<br/>Hierarchical Filter)]:::db
-    M[SLM Inference<br/>(Qwen2-0.5b)]:::policy
+    C["Next.js Client Dash<br/>(Glassmorphic UI)"]:::client
+    P["Security Policy Engine<br/>(JSON Configuration)"]:::policy
+    A["FastAPI Gateway<br/>(Query-Time Guard)"]:::gateway
+    Audit[("SQLite Audit Logs")]:::gateway
+    DB[("ChromaDB Store<br/>Hierarchical Filter")]:::db
+    M["SLM Inference<br/>(Qwen2-0.5b)"]:::policy
 
     %% Edges
     C -->|Ask Query| A
