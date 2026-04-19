@@ -33,6 +33,17 @@ A visual cockpit for security administrators:
 
 ---
 
+## 📸 Zero-Trust Showcase
+
+Compare how the platform's **Proactive Security Guard** handles requests for the same sensitive data based on the user's clearance level.
+
+| **ADMIN ACCESS (Level 3)** | **EMPLOYEE ACCESS (Level 1)** |
+| :---: | :---: |
+| ![Admin View](docs/admin_allowed.png) | ![Employee View](docs/employee_blocked.png) |
+| **Full Retrieval & Citations**: The Admin receives the exact salary ($850k) with traceable source links and clickable Explainable AI badges. | **Automatic Interception**: The system detects a sensitive topic and blocks the query before it reaches the AI, preventing hallucinations. |
+
+---
+
 ## 🏗️ System Architecture
 
 ```mermaid
