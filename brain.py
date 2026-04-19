@@ -48,30 +48,42 @@ class SecureRAG:
         if chat_history is None:
             chat_history = []
             
-        # 1. Proactive Query Guard (No-Hallucination Flex)
-        # Check if the query itself asks about sensitive topics defined in our policies
+    def is_query_denied(self, user_query: str, user_role: str) -> tuple[bool, str]:
+        """Checks if a query itself contains restricted topics based on JSON policies."""
         user_clearance = self.ROLE_LEVELS.get(user_role, 1)
         query_lower = user_query.lower()
 
-        # Check for Admin topics in query
-        if user_clearance < 3: # Not an Admin
-            admin_kws = self.policies.get("admin", {}).get("keywords", [])
-            if any(kw.lower() in query_lower for kw in admin_kws):
-                return {
-                    "answer": "Security Alert: Access to sensitive administrative topics is restricted to authorized personnel. This attempt has been logged.",
-                    "sources": []
-                }
+        # Check in order of sensitivity (Admin first)
+        for role, level in sorted(self.ROLE_LEVELS.items(), key=lambda x: x[1], reverse=True):
+            if user_clearance < level:
+                cfg = self.policies.get(role, {})
+                # Check dynamic keywords
+                for kw in cfg.get("keywords", []):
+                    if kw.lower() in query_lower:
+                        return True, f"Security Alert: Access to {role} topics is restricted."
+                # Check dynamic regex patterns
+                for pattern in cfg.get("patterns", []):
+                    try:
+                        if re.search(pattern, user_query):
+                            return True, f"Security Alert: Restricted content pattern detected ({role} clearance required)."
+                    except: continue # Ignore malformed regex in JSON
         
-        # Check for Manager topics in query
-        if user_clearance < 2: # Not a Manager
-            manager_kws = self.policies.get("manager", {}).get("keywords", [])
-            if any(kw.lower() in query_lower for kw in manager_kws):
-                return {
-                    "answer": "Clearance Denied: You do not have the required role level to query strategic management data.",
-                    "sources": []
-                }
+        return False, ""
 
-        # 2. Search with Metadata Filtering using $lte (Less Than or Equal)
+    def query(self, user_query: str, user_role: str, chat_history: list = None):
+        if chat_history is None:
+            chat_history = []
+            
+        # 1. Proactive Query Guard (Dynamic JSON-Driven)
+        is_denied, reason = self.is_query_denied(user_query, user_role)
+        if is_denied:
+            return {
+                "answer": reason,
+                "sources": []
+            }
+
+        # 2. Search with Metadata Filtering
+        user_clearance = self.ROLE_LEVELS.get(user_role, 1)
         docs = self.vector_db.similarity_search(
             user_query, 
             k=3, 
