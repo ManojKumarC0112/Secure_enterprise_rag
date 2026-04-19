@@ -211,16 +211,18 @@ def ask_question(request: QueryRequest, current_user: dict = Depends(get_current
 
     try:
         # Process via Secure Brain (Pass history)
-        response = rag.query(request.question, role, chat_history)
-        
+        result = rag.query(request.question, role, chat_history)
+        answer = result["answer"]
+        sources = result["sources"]
+
         # save assistant msg
         timestamp2 = datetime.now().isoformat()
         c.execute("INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-                  (session_id, "assistant", response, timestamp2))
+                  (session_id, "assistant", answer, timestamp2))
         conn.commit()
 
         log_query(role, request.question, 200)
-        return {"session_id": session_id, "role_used": role, "answer": response}
+        return {"session_id": session_id, "role_used": role, "answer": answer, "sources": sources}
     except Exception as e:
         log_query(role, request.question, 500)
         raise HTTPException(status_code=500, detail=str(e))
@@ -269,7 +271,73 @@ def get_audit_logs(current_user: dict = Depends(get_current_user)):
     # Returns last 10 logs for the dashboard
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT id, timestamp, role, query, status_code FROM audit_logs ORDER BY id DESC LIMIT 10")
-    logs = [{"id": row[0], "time": row[1], "role": row[2].upper(), "action": row[3], "statusCode": row[4]} for row in c.fetchall()]
+    c.execute("SELECT timestamp, role, event, status_code FROM audit_logs ORDER BY id DESC LIMIT 10")
+    logs = [{"timestamp": r[0], "role": r[1], "event": r[2], "status": r[3]} for r in c.fetchall()]
     conn.close()
-    return {"logs": logs}
+    return logs
+
+@app.get("/admin/stats")
+def get_admin_stats(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM audit_logs")
+    total_queries = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM audit_logs WHERE status_code = 403")
+    total_blocks = c.fetchone()[0]
+    
+    # Active Users (count distinct valid users in db)
+    c.execute("SELECT COUNT(*) FROM users")
+    total_users = c.fetchone()[0]
+    conn.close()
+    
+    return {
+        "total_queries": total_queries,
+        "total_blocks": total_blocks,
+        "total_users": total_users
+    }
+
+@app.get("/documents")
+def get_documents(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    collection = rag.vector_db.get(include=["metadatas"])
+    metadatas = collection.get("metadatas", [])
+    
+    # Extract unique files and their clearance
+    docs_map = {}
+    for meta in metadatas:
+        if meta and "source" in meta:
+            src = meta["source"]
+            role = meta.get("allowed_role", "unknown")
+            if src not in docs_map:
+                docs_map[src] = {"filename": os.path.basename(src), "path": src, "roles": set()}
+            docs_map[src]["roles"].add(role)
+            
+    # Serialize
+    result = []
+    for src, data in docs_map.items():
+        role_label = list(data["roles"])[0] if len(data["roles"]) == 1 else "mixed_clearance"
+        result.append({
+            "filename": data["filename"],
+            "path": data["path"],
+            "classification": role_label
+        })
+    return result
+
+@app.delete("/documents")
+def delete_document(path: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Delete from vector DB using direct collection where clause
+    collection = rag.vector_db._collection
+    collection.delete(where={"source": path})
+    
+    if hasattr(rag.vector_db, "persist"):
+        rag.vector_db.persist()
+        
+    return {"status": "success", "message": f"Deleted {path}"}

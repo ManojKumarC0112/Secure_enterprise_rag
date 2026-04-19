@@ -23,6 +23,7 @@ interface Message {
   id: number;
   role: string;
   content: string;
+  sources?: any[];
 }
 
 export default function Home() {
@@ -40,6 +41,8 @@ export default function Home() {
   
   const [displayedText, setDisplayedText] = useState("");
   const [latestAssistantMsg, setLatestAssistantMsg] = useState("");
+  const [latestSources, setLatestSources] = useState<any[]>([]);
+  const [viewSource, setViewSource] = useState<any>(null);
 
   // Upload State
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -102,6 +105,7 @@ export default function Home() {
     setMessages([]);
     setDisplayedText("");
     setLatestAssistantMsg("");
+    setLatestSources([]);
     try {
       const res = await fetch(`http://127.0.0.1:8000/sessions/${sessionId}/messages`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -129,8 +133,9 @@ export default function Home() {
       if (i > latestAssistantMsg.length) {
          clearInterval(interval);
          // Once finished typing, convert display text to formal message object
-         setMessages(prev => [...prev, { id: Date.now(), role: "assistant", content: latestAssistantMsg }]);
+         setMessages(prev => [...prev, { id: Date.now(), role: "assistant", content: latestAssistantMsg, sources: latestSources }]);
          setLatestAssistantMsg(""); // Clear to stop streaming
+         setLatestSources([]);
       }
     }, 10);
     return () => clearInterval(interval);
@@ -192,6 +197,7 @@ export default function Home() {
     setQuery("");
     setIsSearching(true);
     setLatestAssistantMsg("");
+    setLatestSources([]);
     
     // Add optimistic user message
     setMessages(prev => [...prev, { id: Date.now(), role: "user", content: q }]);
@@ -212,6 +218,7 @@ export default function Home() {
            setActiveSessionId(data.session_id);
            fetchSessions(token);
         }
+        setLatestSources(data.sources || []);
         setLatestAssistantMsg(data.answer);
       } else {
         setLatestAssistantMsg(`[ERROR] ${data.detail || "Access Denied"}`);
@@ -252,6 +259,15 @@ export default function Home() {
             </button>
           ))}
         </div>
+        
+        {/* ADMIN NAVIGATION */}
+        {role === 'admin' && (
+          <div className="px-4 pb-4">
+             <button onClick={() => router.push("/admin")} className="w-full flex items-center gap-2 justify-center bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 p-2.5 rounded-lg transition-colors font-bold text-xs uppercase tracking-widest shadow-sm">
+                <ShieldAlert className="w-4 h-4" /> Command Center
+             </button>
+          </div>
+        )}
         
         {/* LOGOUT FOOTER */}
         <div className="p-4 border-t border-slate-800 flex items-center gap-3 bg-slate-900/50">
@@ -343,6 +359,25 @@ export default function Home() {
                   <div className={`prose max-w-none text-sm leading-relaxed ${m.role === 'user' ? 'text-indigo-50' : m.content.includes('[ERROR]') ? 'text-red-600 font-medium' : 'text-slate-700'}`}>
                     {m.content}
                   </div>
+                  
+                  {/* SOURCE CITATIONS */}
+                  {m.sources && m.sources.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Explainable AI Sources</span>
+                       <div className="flex flex-wrap gap-2">
+                         {m.sources.map((src: any, idx: number) => (
+                           <button 
+                             key={idx} 
+                             onClick={() => setViewSource(src)} 
+                             className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 border border-indigo-200/50 shadow-sm"
+                           >
+                             <FileText className="w-3.5 h-3.5" /> 
+                             {src.source.split(/[/\\]/).pop()}
+                           </button>
+                         ))}
+                       </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -426,6 +461,29 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* MODAL FOR SOURCE TEXT */}
+      {viewSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all" onClick={() => setViewSource(null)}>
+           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+                 <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-indigo-500" />
+                    <span className="font-semibold text-sm text-slate-800">{viewSource.source.split(/[/\\]/).pop()}</span>
+                 </div>
+                 <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-xs font-bold rounded uppercase">Read-Only</span>
+              </div>
+              <div className="p-6 max-h-[60vh] overflow-y-auto">
+                 <p className="text-sm font-mono text-slate-700 leading-relaxed whitespace-pre-wrap">{viewSource.text}</p>
+              </div>
+              <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-end">
+                 <button onClick={() => setViewSource(null)} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium rounded-lg shadow transition-colors">
+                    Close Inspect
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
 
     </div>
   );

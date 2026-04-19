@@ -4,6 +4,7 @@ from langchain_community.llms import Ollama
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+import re
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -42,7 +43,10 @@ class SecureRAG:
         )
 
         if not docs:
-            return "Access Denied: You do not have permissions to view the documents required to answer this or no relevant documents exist."
+            return {
+                "answer": "Access Denied: You do not have permissions to view the documents required to answer this or no relevant documents exist.",
+                "sources": []
+            }
 
         # Format chat history into string
         history_context = ""
@@ -67,7 +71,20 @@ Question: {user_query}
 
 Short, direct answer:"""
         
-        return self.llm.invoke(prompt)
+        answer = self.llm.invoke(prompt)
+        
+        # Package explainable AI sources
+        source_data = []
+        for d in docs:
+            source_data.append({
+                "source": d.metadata.get("source", "Unknown"),
+                "text": d.page_content
+            })
+            
+        return {
+            "answer": answer,
+            "sources": source_data
+        }
 
     def auto_classify(self, sample_text: str) -> str:
         prompt = f"""
@@ -93,6 +110,16 @@ Short, direct answer:"""
         else:
             return "employee" # Least privilege default fallback
 
+    def sanitize_pii(self, text: str) -> str:
+        """Automatically redacts sensitive SSNs and Credit Cards before ingestion."""
+        # Redact SSNs (XXX-XX-XXXX)
+        text = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[REDACTED_SSN]', text)
+        # Redact Credit Cards (XXXX-XXXX-XXXX-XXXX)
+        text = re.sub(r'\b(?:\d{4}-){3}\d{4}\b|\b\d{16}\b', '[REDACTED_CC]', text)
+        # Standard Phone numbers
+        text = re.sub(r'\b\d{3}-\d{3}-\d{4}\b', '[REDACTED_PHONE]', text)
+        return text
+
     def ingest_document(self, file_path: str, role: str):
         """Dynamically ingests a new PDF into the active ChromaDB instance."""
         loader = PyPDFLoader(file_path)
@@ -103,6 +130,9 @@ Short, direct answer:"""
         
         assigned_roles = set()
         for chunk in chunks:
+            # 1. PII Autofill Redaction (Cybersecurity Flex)
+            chunk.page_content = self.sanitize_pii(chunk.page_content)
+            
             chunk_role = role
             if role == "auto":
                 # Auto-classify the individual chunk to guarantee true Zero-Trust granularity
@@ -130,7 +160,7 @@ if __name__ == "__main__":
     rag = SecureRAG()
     # Test as a Developer/Employee
     print("--- Testing as Employee ---")
-    print(rag.query("What are the salaries for L4?", "employee")) 
+    print(rag.query("What are the salaries for L4?", "employee")["answer"]) 
     
     print("\n--- Testing as Admin ---")
-    print(rag.query("What are the salaries for L4?", "admin"))
+    print(rag.query("What are the salaries for L4?", "admin")["answer"])
