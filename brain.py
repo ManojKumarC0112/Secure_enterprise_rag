@@ -6,6 +6,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 import re
 import warnings
+import json
+import os
 warnings.filterwarnings('ignore')
 
 class SecureRAG:
@@ -28,6 +30,19 @@ class SecureRAG:
             "manager": 2,
             "employee": 1
         }
+        
+        # Load Dynamic Security Policies
+        self.policies = self.load_policies()
+
+    def load_policies(self):
+        policy_path = "security_policies.json"
+        if os.path.exists(policy_path):
+            try:
+                with open(policy_path, "r") as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading security policies: {e}")
+        return {"admin": {"keywords": [], "patterns": []}, "manager": {"keywords": [], "patterns": []}}
 
     def query(self, user_query: str, user_role: str, chat_history: list = None):
         if chat_history is None:
@@ -90,14 +105,24 @@ Short, direct answer:"""
         }
 
     def auto_classify(self, sample_text: str) -> str:
-        # --- HEURISTIC BOOSTER (Security Flex) ---
-        # Before asking the SLM, check for explicit security markers
+        # --- DYNAMIC POLICY BOOSTER (Security Flex) ---
         text_lower = sample_text.lower()
-        if any(kw in text_lower for kw in ["salary", "m&a", "merger", "acquisition", "payroll", "equity", "bonus", "highly confidential", "admin access"]):
-            return "admin"
-        if any(kw in text_lower for kw in ["strategy", "roadmap", "manager", "confidential"]):
-            return "manager"
+        
+        # 1. Check Admin Policies
+        admin_cfg = self.policies.get("admin", {})
+        for kw in admin_cfg.get("keywords", []):
+            if kw.lower() in text_lower: return "admin"
+        for pattern in admin_cfg.get("patterns", []):
+            if re.search(pattern, sample_text): return "admin"
+
+        # 2. Check Manager Policies
+        manager_cfg = self.policies.get("manager", {})
+        for kw in manager_cfg.get("keywords", []):
+            if kw.lower() in text_lower: return "manager"
+        for pattern in manager_cfg.get("patterns", []):
+            if re.search(pattern, sample_text): return "manager"
             
+        # 3. Fallback to SLM for ambiguous analysis
         prompt = f"""
         You are a highly secure document classification AI. Read the target document snippet below.
         You must reply with EXACTLY ONE WORD determining its security clearance level: 

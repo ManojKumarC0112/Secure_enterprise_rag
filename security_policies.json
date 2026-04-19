@@ -1,0 +1,39 @@
+{
+  "admin": {
+    "keywords": [
+      "salary",
+      "m&a",
+      "merger",
+      "acquisition",
+      "payroll",
+      "equity",
+      "bonus",
+      "highly confidential",
+      "admin access",
+      "board meeting",
+      "executive compensation",
+      "project alpha",
+      "PROJECT_VOID_WALKER"
+    ],
+    "patterns": [
+      "\\b[0-9]{3}-[0-9]{2}-[0-9]{4}\\b",
+      "\\b(?:\\d{4}-){3}\\d{4}\\b"
+    ]
+  },
+  "manager": {
+    "keywords": [
+      "strategy",
+      "roadmap",
+      "manager",
+      "confidential",
+      "hiring plan",
+      "quarterly targets",
+      "project beta",
+      "budget allocation"
+    ],
+    "patterns": []
+  },
+  "employee": {
+    "description": "Default fallback level for general company information."
+  }
+}
