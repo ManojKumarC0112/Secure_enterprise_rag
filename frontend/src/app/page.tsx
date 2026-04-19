@@ -139,7 +139,7 @@ export default function Home() {
       }
     }, 10);
     return () => clearInterval(interval);
-  }, [latestAssistantMsg]);
+  }, [latestAssistantMsg, latestSources]);
 
   // Scroll to bottom
   useEffect(() => {

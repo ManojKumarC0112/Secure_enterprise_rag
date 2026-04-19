@@ -22,29 +22,32 @@ class SecureRAG:
         # 3. Initialize local SLM via Ollama
         self.llm = Ollama(model="qwen2:0.5b")
 
+        # Map roles to strictly numerical clearance levels for robust filtering
+        self.ROLE_LEVELS = {
+            "admin": 3,
+            "manager": 2,
+            "employee": 1
+        }
+
     def query(self, user_query: str, user_role: str, chat_history: list = None):
         if chat_history is None:
             chat_history = []
             
-        # Define hierarchical access logic
-        # Admin sees everything; Manager sees manager + employee; Employee sees employee.
-        accessible_roles = ["employee"]
-        if user_role == "admin":
-            accessible_roles = ["admin", "manager", "employee"]
-        elif user_role == "manager":
-            accessible_roles = ["manager", "employee"]
+        # Get numerical clearance level (default to 1 if unknown)
+        user_clearance = self.ROLE_LEVELS.get(user_role, 1)
 
-        # 4. Search with Metadata Filtering
-        # This ensures the LLM NEVER even sees chunks the user isn't allowed to see.
+        # 4. Search with Metadata Filtering using $lte (Less Than or Equal)
+        # This ensures an Employee (1) NEVER sees Manager (2) or Admin (3) records.
+        # This syntax is highly robust across Chroma versions.
         docs = self.vector_db.similarity_search(
             user_query, 
             k=3, 
-            filter={"allowed_role": {"$in": accessible_roles}}
+            filter={"clearance_level": {"$lte": user_clearance}}
         )
 
         if not docs:
             return {
-                "answer": "Access Denied: You do not have permissions to view the documents required to answer this or no relevant documents exist.",
+                "answer": "I do not have clearance to access information relevant to this query, or no relevant public documents exist.",
                 "sources": []
             }
 
@@ -87,6 +90,14 @@ Short, direct answer:"""
         }
 
     def auto_classify(self, sample_text: str) -> str:
+        # --- HEURISTIC BOOSTER (Security Flex) ---
+        # Before asking the SLM, check for explicit security markers
+        text_lower = sample_text.lower()
+        if any(kw in text_lower for kw in ["salary", "m&a", "merger", "acquisition", "payroll", "equity", "bonus", "highly confidential", "admin access"]):
+            return "admin"
+        if any(kw in text_lower for kw in ["strategy", "roadmap", "manager", "confidential"]):
+            return "manager"
+            
         prompt = f"""
         You are a highly secure document classification AI. Read the target document snippet below.
         You must reply with EXACTLY ONE WORD determining its security clearance level: 
@@ -102,13 +113,12 @@ Short, direct answer:"""
         # Invoke the LLM
         response = self.llm.invoke(prompt).strip().lower()
         
-        # Filter strict output
         if "admin" in response:
             return "admin"
         elif "manager" in response:
             return "manager"
         else:
-            return "employee" # Least privilege default fallback
+            return "employee"
 
     def sanitize_pii(self, text: str) -> str:
         """Automatically redacts sensitive SSNs and Credit Cards before ingestion."""
@@ -130,30 +140,28 @@ Short, direct answer:"""
         
         assigned_roles = set()
         for chunk in chunks:
-            # 1. PII Autofill Redaction (Cybersecurity Flex)
             chunk.page_content = self.sanitize_pii(chunk.page_content)
             
             chunk_role = role
             if role == "auto":
-                # Auto-classify the individual chunk to guarantee true Zero-Trust granularity
-                chunk_role = self.auto_classify(chunk.page_content[:1000])
+                chunk_role = self.auto_classify(chunk.page_content)
+            
+            # Map role to level for storage
+            level = self.ROLE_LEVELS.get(chunk_role, 1)
             
             chunk.metadata["allowed_role"] = chunk_role
+            chunk.metadata["clearance_level"] = level
             chunk.metadata["source"] = file_path
             assigned_roles.add(chunk_role)
         
         self.vector_db.add_documents(chunks)
         
-        # For chromadb > 1.5, persistence is automatic. If older, we would call self.vector_db.persist()
         if hasattr(self.vector_db, "persist"):
             self.vector_db.persist()
             
-        if len(assigned_roles) > 1:
-            return "mixed_clearance"
-        elif len(assigned_roles) == 1:
-            return list(assigned_roles)[0]
-        else:
-            return "employee"
+        if "admin" in assigned_roles: return "admin"
+        if "manager" in assigned_roles: return "manager"
+        return "employee"
 
 # Quick Test Script
 if __name__ == "__main__":
