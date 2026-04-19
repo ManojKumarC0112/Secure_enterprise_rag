@@ -271,10 +271,10 @@ def get_audit_logs(current_user: dict = Depends(get_current_user)):
     # Returns last 10 logs for the dashboard
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT timestamp, role, event, status_code FROM audit_logs ORDER BY id DESC LIMIT 10")
-    logs = [{"timestamp": r[0], "role": r[1], "event": r[2], "status": r[3]} for r in c.fetchall()]
+    c.execute("SELECT id, timestamp, role, query, status_code FROM audit_logs ORDER BY id DESC LIMIT 10")
+    logs = [{"id": row[0], "time": row[1], "role": row[2].upper(), "action": row[3], "statusCode": row[4], "status": str(row[4])} for row in c.fetchall()]
     conn.close()
-    return logs
+    return {"logs": logs}
 
 @app.get("/admin/stats")
 def get_admin_stats(current_user: dict = Depends(get_current_user)):
